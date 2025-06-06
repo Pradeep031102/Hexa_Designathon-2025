@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Document Ingestion & Classification - Prototype</title>
+  <style>
+    :root {
+      --primary-color: #4a90e2;
+      --secondary-color: #50e3c2;
+      --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      --bg-color: #f4f6f8;
+      --box-shadow: 0 4px 12px rgba(74, 144, 226, 0.2);
+      --border-radius: 8px;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font-family);
+      background-color: var(--bg-color);
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 1rem 2rem;
+      background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+      color: white;
+      font-size: 1.5rem;
+      font-weight: 700;
+      text-align: center;
+      box-shadow: var(--box-shadow);
+    }
+
+    main {
+      flex-grow: 1;
+      padding: 2rem;
+      max-width: 1200px;
+      margin: auto;
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      gap: 2rem;
+    }
+
+    .panel {
+      background: white;
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    h2 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      color: var(--primary-color);
+    }
+
+    /* Upload Panel */
+    #upload-area {
+      border: 2px dashed var(--primary-color);
+      border-radius: var(--border-radius);
+      padding: 2rem;
+      text-align: center;
+      color: var(--primary-color);
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      user-select: none;
+    }
+    #upload-area.dragover {
+      background-color: var(--secondary-color);
+      color: white;
+    }
+    #file-input {
+      display: none;
+    }
+    .btn {
+      background-color: var(--primary-color);
+      border: none;
+      color: white;
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      margin-top: 1rem;
+      border-radius: var(--border-radius);
+      font-size: 1rem;
+      transition: background-color 0.3s ease;
+    }
+    .btn:hover {
+      background-color: #3a76bf;
+    }
+
+    /* Workflow Progress Bar */
+    #workflow-progress {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .progress-step {
+      flex-grow: 1;
+      position: relative;
+      padding: 0.5rem;
+      text-align: center;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #999;
+      cursor: default;
+    }
+    .progress-step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      right: 0;
+      width: 100%;
+      height: 4px;
+      background: #ddd;
+      z-index: -1;
+      transform: translateY(-50%);
+      margin-left: 2rem;
+    }
+    .progress-step.active {
+      color: var(--secondary-color);
+    }
+    .progress-step.completed {
+      color: var(--primary-color);
+    }
+    .progress-step.completed:not(:last-child)::after {
+      background: var(--primary-color);
+    }
+    .timestamp {
+      font-size: 0.75rem;
+      color: #666;
+      margin-top: 0.15rem;
+    }
+
+    /* Document Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead th {
+      background: var(--primary-color);
+      color: white;
+      padding: 0.75rem;
+      text-align: left;
+      font-weight: 600;
+      border-radius: var(--border-radius);
+    }
+    tbody tr {
+      border-bottom: 1px solid #ddd;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    tbody tr:hover {
+      background-color: var(--bg-color);
+    }
+    tbody td {
+      padding: 0.5rem 0.75rem;
+    }
+    .expandable-content {
+      background-color: #f1f9ff;
+      font-size: 0.9rem;
+      padding: 0.75rem 1rem;
+      border-radius: var(--border-radius);
+      margin-top: 0.25rem;
+      overflow-wrap: break-word;
+      white-space: pre-wrap;
+    }
+
+    /* Manual Override Buttons */
+    .override-buttons {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.75rem;
+    }
+    .override-buttons button {
+      background-color: var(--secondary-color);
+      border: none;
+      color: white;
+      border-radius: var(--border-radius);
+      padding: 0.4rem 1rem;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      font-size: 0.9rem;
+    }
+    .override-buttons button:hover {
+      background-color: #3bb8a5;
+    }
+
+    /* Console Output */
+    #console-output {
+      height: 200px;
+      overflow-y: auto;
+      background-color: black;
+      color: #0f0;
+      font-family: monospace;
+      padding: 1rem;
+      border-radius: var(--border-radius);
+      white-space: pre-wrap;
+      box-shadow: inset 0 0 10px #0f0;
+    }
+    footer {
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.85rem;
+      color: #999;
+      background-color: #fff;
+      border-top: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+<header>Document Ingestion & Classification - AI-Powered Multi-Agent System Prototype</header>
+<main>
+  <section class="panel" aria-label="Upload and Ingestion Panel">
+    <h2>Upload / Ingestion Panel</h2>
+    <div id="upload-area" tabindex="0" aria-describedby="upload-instructions">
+      <p id="upload-instructions">Drag & Drop files here or click to select files</p>
+      <input type="file" id="file-input" multiple aria-label="File Upload Input" />
+    </div>
+    <button class="btn" id="connect-mailbox-btn" disabled title="Mailbox connection not implemented in prototype">Connect Mailbox (Disabled)</button>
+
+    <h2 style="margin-top:2rem;">Workflow Progress</h2>
+    <div id="workflow-progress" aria-live="polite" aria-atomic="true">
+      <div class="progress-step" data-step="ingested" title="Document Ingested">Ingested</div>
+      <div class="progress-step" data-step="extracted" title="Text Extracted">Extracted</div>
+      <div class="progress-step" data-step="classified" title="Document Classified">Classified</div>
+      <div class="progress-step" data-step="routed" title="Document Routed">Routed</div>
+    </div>
+
+    <h2>Documents & Status</h2>
+    <table role="grid" aria-label="Document list">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Type</th>
+          <th scope="col">Status</th>
+          <th scope="col">Last Updated</th>
+        </tr>
+      </thead>
+      <tbody id="document-list">
+
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel" aria-label="Console Output and Manual Overrides">
+    <h2>Console Output</h2>
+    <div id="console-output" aria-live="polite" aria-atomic="false" role="log"></div>
+
+    <h2 style="margin-top:2rem;">Manual Overrides</h2>
+    <div class="override-buttons" aria-label="Manual Override Controls">
+      <button id="re-extract-btn" disabled>Re-extract</button>
+      <button id="re-classify-btn" disabled>Re-classify</button>
+      <button id="re-route-btn" disabled>Route to...</button>
+    </div>
+  </section>
+</main>
+<footer>
+  Prototype by AI Assistant | No real AI/ML or backend, demonstration only
+</footer>
+
+<script>
+  // Central Message Bus for agents communication
+  class MessageBus {
+    constructor() {
+      this.listeners = {};
+    }
+
+    subscribe(eventType, callback) {
+      if (!this.listeners[eventType]) {
+        this.listeners[eventType] = [];
+      }
+      this.listeners[eventType].push(callback);
+    }
+
+    emit(eventType, payload) {
+      if (this.listeners[eventType]) {
+        this.listeners[eventType].forEach(cb => cb(payload));
+      }
+    }
+  }
+
+  const messageBus = new MessageBus();
+
+  // Agents implementations - simulated
+
+  // Helper: delay helper to simulate processing
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Ingestor Agent
+  class IngestorAgent {
+    constructor(bus) {
+      this.bus = bus;
+    }
+
+    ingest(doc) {
+      this.log(`Ingestor: Received document '${doc.name}' (size=${doc.size} bytes)`);
+      // Simulate prioritization by size for demonstration
+      doc.priority = doc.size > 100000 ? 'high' : 'normal';
+      // Adding metadata event doc.received
+      doc.state = 'ingested';
+      doc.timestamps = { ingested: new Date().toISOString() };
+      this.bus.emit('doc.received', doc);
+    }
+
+    log(msg) {
+      consoleLog(msg);
+    }
+  }
+
+  // Extractor Agent - simulating OCR + NLP
+  class ExtractorAgent {
+    constructor(bus) {
+      this.bus = bus;
+      this.bus.subscribe('doc.received', async (doc) => {
+        await this.extract(doc);
+      });
+    }
+
+    async extract(doc) {
+      this.log(`Extractor: Processing document '${doc.name}'`);
+      await delay(1500);
+
+      // Simulated OCR/Extraction: Just read file text if txt, else dummy text
+      let text = doc.content || "";
+
+      // Simulated entity extraction via regex (dates, amounts, parties)
+      let entities = this.extractEntities(text);
+
+      doc.text = text;
+      doc.entities = entities;
+      doc.state = 'extracted';
+      doc.timestamps.extracted = new Date().toISOString();
+
+      this.log(`Extractor: Extracted text length ${text.length}, entities found: ${Object.keys(entities).length}`);
+      this.bus.emit('doc.extracted', doc);
+    }
+
+    extractEntities(text) {
+      const entities = {};
+      // Simple regex for dates (YYYY-MM-DD, MM/DD/YYYY)
+      const dateRegex = /\b(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\b/g;
+      let dates = text.match(dateRegex);
+      if (dates) entities.dates = dates;
+
+      // Amounts: numbers with $ or decimal
+      const amountRegex = /\$\d+(?:,\d{3})*(?:\.\d{2})?/g;
+      let amounts = text.match(amountRegex);
+      if (amounts) entities.amounts = amounts;
+
+      // Parties: simulate extraction by looking for "Party: <name>"
+      const partyRegex = /Party:\s*([A-Za-z0-9 &]+)/g;
+      let parties = [];
+      let match;
+      while ((match = partyRegex.exec(text)) !== null) {
+        parties.push(match[1].trim());
+      }
+      if (parties.length) entities.parties = parties;
+
+      return entities;
+    }
+
+    log(msg) {
+      consoleLog(msg);
+    }
+  }
+
+  // Classifier Agent
+  class ClassifierAgent {
+    constructor(bus) {
+      this.bus = bus;
+      this.bus.subscribe('doc.extracted', async (doc) => {
+        await this.classify(doc);
+      });
+    }
+
+    async classify(doc) {
+      this.log(`Classifier: Classifying document '${doc.name}'`);
+      await delay(1200);
+      // Simple keyword-based classification for prototype
+      let lowered = doc.text.toLowerCase();
+
+      let type = 'unknown';
+      let confidence = 0.5;
+
+      if (lowered.includes('invoice')) {
+        type = 'Invoice';
+        confidence = 0.95;
+      } else if (lowered.includes('contract')) {
+        type = 'Contract';
+        confidence = 0.90;
+      } else if (lowered.includes('report')) {
+        type = 'Report';
+        confidence = 0.85;
+      }
+
+      // Flag for manual review if confidence is low (<0.7)
+      doc.type = type;
+      doc.confidence = confidence;
+      doc.state = 'classified';
+      doc.timestamps.classified = new Date().toISOString();
+
+      if (confidence < 0.7) {
+        doc.needsReview = true;
+        this.log(`Classifier: Low confidence (${confidence}), flagged for human review.`);
+      } else {
+        doc.needsReview = false;
+        this.log(`Classifier: Classified as '${type}' with confidence ${confidence}`);
+      }
+
+      this.bus.emit('doc.classified', doc);
+    }
+
+    log(msg) {
+      consoleLog(msg);
+    }
+  }
+
+  // Router Agent
+  class RouterAgent {
+    constructor(bus) {
+      this.bus = bus;
+      this.bus.subscribe('doc.classified', async (doc) => {
+        await this.route(doc);
+      });
+    }
+
+    async route(doc) {
+      this.log(`Router: Routing document '${doc.name}' (Type: ${doc.type})`);
+      await delay(1000);
+
+      // Routing logic (simulate)
+      let command = null;
+      switch(doc.type) {
+        case 'Invoice':
+          command = 'Send to Accounting ERP system';
+          break;
+        case 'Contract':
+          command = 'Upload to Document Management System (DMS)';
+          break;
+        case 'Report':
+          command = 'Email alert to stakeholders';
+          break;
+        default:
+          command = 'Send to manual review queue';
+          break;
+      }
+      doc.routingCommand = command;
+
+      doc.state = 'routed';
+      doc.timestamps.routed = new Date().toISOString();
+
+      this.log(`Router: Executed routing command: ${command}`);
+      this.bus.emit('doc.routed', doc);
+    }
+
+    log(msg) {
+      consoleLog(msg);
+    }
+  }
+
+  // Storage for documents (simulate DB)
+  const documents = [];
+
+  // UI Elements
+  const fileInput = document.getElementById('file-input');
+  const uploadArea = document.getElementById('upload-area');
+  const documentListEl = document.getElementById('document-list');
+  const consoleOutput = document.getElementById('console-output');
+  const progressSteps = document.querySelectorAll('.progress-step');
+  const reExtractBtn = document.getElementById('re-extract-btn');
+  const reClassifyBtn = document.getElementById('re-classify-btn');
+  const reRouteBtn = document.getElementById('re-route-btn');
+
+  let selectedDocId = null;
+
+  // Initialize agents
+  const ingestor = new IngestorAgent(messageBus);
+  const extractor = new ExtractorAgent(messageBus);
+  const classifier = new ClassifierAgent(messageBus);
+  const router = new RouterAgent(messageBus);
+
+  // Upload handlers
+  uploadArea.addEventListener('click', () => fileInput.click());
+  uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+  });
+  uploadArea.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+  });
+  uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    handleFiles(e.target.files);
+  });
+
+  function handleFiles(files) {
+    if (files.length === 0) return;
+    for (let file of files) {
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const content = evt.target.result;
+        const doc = {
+          id: generateId(),
+          name: file.name,
+          size: file.size,
+          content: typeof content === 'string' ? content : '',
+          state: 'received',
+          timestamps: {},
+          needsReview: false
+        };
+        documents.push(doc);
+        renderDocumentList();
+        ingestor.ingest(doc);
+      };
+      // Read as text for demo, any file will be interpreted as text to keep simple
+      reader.readAsText(file);
+    }
+  }
+
+  // Listen to document events to update UI
+  messageBus.subscribe('doc.received', (doc) => {
+    updateDocument(doc);
+  });
+
+  messageBus.subscribe('doc.extracted', (doc) => {
+    updateDocument(doc);
+  });
+
+  messageBus.subscribe('doc.classified', (doc) => {
+    updateDocument(doc);
+  });
+
+  messageBus.subscribe('doc.routed', (doc) => {
+    updateDocument(doc);
+  });
+
+  function updateDocument(updatedDoc) {
+    const idx = documents.findIndex(d => d.id === updatedDoc.id);
+    if (idx !== -1) {
+      documents[idx] = updatedDoc;
+      renderDocumentList();
+      if (selectedDocId === updatedDoc.id) {
+        renderExpandedRow(documents[idx]);
+        updateWorkflowProgress(documents[idx]);
+      }
+    }
+  }
+
+  // Generate simple unique id
+  function generateId() {
+    return 'doc_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  // Render document list with expandable rows
+  function renderDocumentList() {
+    documentListEl.innerHTML = '';
+    for (let doc of documents) {
+      const tr = document.createElement('tr');
+      tr.tabIndex = 0;
+      tr.setAttribute('role', 'row');
+      tr.dataset.id = doc.id;
+
+      tr.innerHTML = `
+        <td>${doc.name}</td>
+        <td>${doc.type || '-'}</td>
+        <td>${capitalize(doc.state)}</td>
+        <td>${latestTimestamp(doc.timestamps)}</td>
+      `;
+
+      tr.addEventListener('click', () => {
+        if (selectedDocId === doc.id) {
+          // Collapse
+          selectedDocId = null;
+          renderDocumentList();
+          clearManualOverrideButtons();
+          clearWorkflowProgress();
+        } else {
+          selectedDocId = doc.id;
+          renderDocumentList();
+          renderExpandedRow(doc);
+          updateWorkflowProgress(doc);
+          enableManualOverrideButtons(doc);
+        }
+      });
+
+      documentListEl.appendChild(tr);
+      if (selectedDocId === doc.id) {
+        const expandedTr = document.createElement('tr');
+        expandedTr.className = 'expandable-content-row';
+        const td = document.createElement('td');
+        td.setAttribute('colspan', 4);
+        td.className = 'expandable-content';
+        expandedTr.appendChild(td);
+
+        const contentLines = [];
+
+        contentLines.push(`ID: ${doc.id}`);
+        contentLines.push(`Priority: ${doc.priority || 'normal'}`);
+        contentLines.push('Timestamps:');
+        for (const [step, time] of Object.entries(doc.timestamps)) {
+          contentLines.push(` - ${capitalize(step)}: ${new Date(time).toLocaleString()}`);
+        }
+        contentLines.push('');
+        contentLines.push('Entities:');
+        if (doc.entities && Object.keys(doc.entities).length > 0) {
+          for (const [key, val] of Object.entries(doc.entities)) {
+            contentLines.push(`  • ${capitalize(key)}: ${val.join(', ')}`);
+          }
+        } else {
+          contentLines.push('  None detected');
+        }
+        contentLines.push('');
+        contentLines.push(`Confidence: ${doc.confidence ? (doc.confidence * 100).toFixed(1) + '%' : '-'}`);
+        contentLines.push(`Needs Review: ${doc.needsReview ? 'Yes' : 'No'}`);
+        contentLines.push('');
+        contentLines.push(`Routing Command: ${doc.routingCommand || '-'}`);
+
+        td.textContent = contentLines.join('\n');
+        documentListEl.appendChild(expandedTr);
+      }
+    }
+  }
+
+  // Helpers
+  function capitalize(str) {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  function latestTimestamp(timestamps) {
+    if (!timestamps) return '-';
+    const times = Object.values(timestamps);
+    if (times.length === 0) return '-';
+    const latest = new Date(Math.max(...times.map(t => new Date(t))));
+    return latest.toLocaleString();
+  }
+
+  // Update Workflow Progress Bar UI
+  function updateWorkflowProgress(doc) {
+    progressSteps.forEach(stepEl => {
+      const step = stepEl.dataset.step;
+      if (step === 'ingested' && doc.timestamps.ingested) {
+        if (doc.state === 'ingested' || doc.state === 'extracted' || doc.state === 'classified' || doc.state === 'routed') {
+          stepEl.classList.add('completed');
+          stepEl.classList.remove('active');
+          stepEl.title = `Completed at ${new Date(doc.timestamps.ingested).toLocaleString()}`;
+          stepEl.innerHTML = 'Ingested<br><span class="timestamp">' + new Date(doc.timestamps.ingested).toLocaleTimeString() + '</span>';
+        } else {
+          stepEl.classList.remove('completed', 'active');
+        }
+      }
+      if (step === 'extracted' && doc.timestamps.extracted) {
+        if (doc.state === 'extracted' || doc.state === 'classified' || doc.state === 'routed') {
+          stepEl.classList.add('completed');
+          stepEl.classList.remove('active');
+          stepEl.title = `Completed at ${new Date(doc.timestamps.extracted).toLocaleString()}`;
+          stepEl.innerHTML = 'Extracted<br><span class="timestamp">' + new Date(doc.timestamps.extracted).toLocaleTimeString() + '</span>';
+        } else {
+          stepEl.classList.remove('completed', 'active');
+        }
+      }
+      if (step === 'classified' && doc.timestamps.classified) {
+        if (doc.state === 'classified' || doc.state === 'routed') {
+          stepEl.classList.add('completed');
+          stepEl.classList.remove('active');
+          stepEl.title = `Completed at ${new Date(doc.timestamps.classified).toLocaleString()}`;
+          stepEl.innerHTML = 'Classified<br><span class="timestamp">' + new Date(doc.timestamps.classified).toLocaleTimeString() + '</span>';
+        } else {
+          stepEl.classList.remove('completed', 'active');
+        }
+      }
+      if (step === 'routed' && doc.timestamps.routed) {
+        if (doc.state === 'routed') {
+          stepEl.classList.add('completed');
+          stepEl.classList.remove('active');
+          stepEl.title = `Completed at ${new Date(doc.timestamps.routed).toLocaleString()}`;
+          stepEl.innerHTML = 'Routed<br><span class="timestamp">' + new Date(doc.timestamps.routed).toLocaleTimeString() + '</span>';
+        } else {
+          stepEl.classList.remove('completed', 'active');
+        }
+      }
+      // Highlight current active step if document is mid processing
+      if (!doc.timestamps.routed) {
+        if (doc.state === 'classified') {
+          progressSteps.forEach(s => s.classList.remove('active'));
+          document.querySelector('.progress-step[data-step="classified"]').classList.add('active');
+        } else if (doc.state === 'extracted') {
+          progressSteps.forEach(s => s.classList.remove('active'));
+          document.querySelector('.progress-step[data-step="extracted"]').classList.add('active');
+        } else if (doc.state === 'ingested') {
+          progressSteps.forEach(s => s.classList.remove('active'));
+          document.querySelector('.progress-step[data-step="ingested"]').classList.add('active');
+        }
+      }
+    });
+  }
+
+  // Clear progress bar highlight
+  function clearWorkflowProgress() {
+    progressSteps.forEach(step => {
+      step.classList.remove('active', 'completed');
+      step.innerHTML = capitalize(step.dataset.step);
+      step.title = step.innerText;
+    });
+  }
+
+  // Console Log output
+  function consoleLog(message) {
+    const now = new Date().toLocaleTimeString();
+    consoleOutput.textContent += `[${now}] ${message}\n`;
+    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+  }
+
+
+  // Manual override buttons & behavior
+  function enableManualOverrideButtons(doc) {
+    reExtractBtn.disabled = false;
+    reClassifyBtn.disabled = false;
+    reRouteBtn.disabled = false;
+
+    reExtractBtn.onclick = () => {
+      consoleLog(`Manual Override: Re-extract triggered on '${doc.name}'`);
+      doc.state = 'ingested';
+      doc.timestamps.extracted = null;
+      doc.timestamps.classified = null;
+      doc.timestamps.routed = null;
+      doc.entities = {};
+      doc.confidence = 0;
+      doc.type = null;
+      doc.needsReview = false;
+      doc.routingCommand = null;
+      updateDocument(doc);
+      messageBus.emit('doc.received', doc);
+    };
+
+    reClassifyBtn.onclick = () => {
+      consoleLog(`Manual Override: Re-classify triggered on '${doc.name}'`);
+      if (doc.state !== 'extracted') {
+        alert('Cannot re-classify before extraction is complete.');
+        return;
+      }
+      doc.state = 'extracted';
+      doc.timestamps.classified = null;
+      doc.timestamps.routed = null;
+      doc.confidence = 0;
+      doc.type = null;
+      doc.needsReview = false;
+      doc.routingCommand = null;
+      updateDocument(doc);
+      messageBus.emit('doc.extracted', doc);
+    };
+
+    reRouteBtn.onclick = () => {
+      consoleLog(`Manual Override: Re-route triggered on '${doc.name}'`);
+      if (doc.state !== 'classified') {
+        alert('Cannot re-route before classification is complete.');
+        return;
+      }
+      doc.state = 'classified';
+      doc.timestamps.routed = null;
+      doc.routingCommand = null;
+      updateDocument(doc);
+      messageBus.emit('doc.classified', doc);
+    };
+  }
+
+  function clearManualOverrideButtons() {
+    reExtractBtn.disabled = true;
+    reClassifyBtn.disabled = true;
+    reRouteBtn.disabled = true;
+
+    reExtractBtn.onclick = null;
+    reClassifyBtn.onclick = null;
+    reRouteBtn.onclick = null;
+  }
+
+  // Initial render
+  renderDocumentList();
+  clearWorkflowProgress();
+  clearManualOverrideButtons();
+</script>
+</body>
+</html>
+
